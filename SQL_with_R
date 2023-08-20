@@ -1,0 +1,195 @@
+library(RSQLite)
+library(tidyverse)
+
+##EDA WITH SQL 
+#Creation a connection with the database
+conn <- dbConnect(RSQLite::SQLite(),"Querying_DatabaseDB.sqlite")
+
+#CREATING TABLES FOR WORLD_CITIES, BIKE_SHARING, CITIES_WEATHER AND SEOUL_BIKE_SHARING
+df1 <- dbExecute(conn, 
+                 'CREATE TABLE WORLD_CITIES (
+                   CITY	VARCHAR(50),
+                   CITY_ASCII VARCHAR(50),
+                   LAT DECIMAL(20,2),
+                   LNG DECIMAL(20,2),
+                   COUNTRY	VARCHAR(50),
+                   ISO2 VARCHAR(5),
+                   ISO3 VARCHAR(5),
+                   ADMIN_NAME VARCHAR(100),	
+                   CAPITAL	VARCHAR(50),
+                   POPULATION BIGINT,
+                   ID BIGINT NOT NULL
+                 )'
+                 )
+df2 <- dbExecute(conn,
+                 'CREATE TABLE BIKE_SHARING_SYSTEMS (
+                   COUNTRY	VARCHAR(20),
+                   CITY VARCHAR(87),
+                   SYSTEM VARCHAR(40),
+                   BICYCLES VARCHAR(5)
+                 )'
+                 )
+df3 <- dbExecute(conn,
+                 'CREATE TABLE CITIES_WEATHER_FORECAST (
+                   CITY VARCHAR(16),
+                   WEATHER VARCHAR(6),
+                   VISIBILITY SMALLINT,
+                   TEMP DECIMAL(6,2),
+                   TEMP_MIN DECIMAL(6,2),
+                   TEMP_MAX DECIMAL(6,2),
+                   PRESSURE SMALLINT,
+                   HUMIDITY SMALLINT,
+                   WIND_SPEED DECIMAL(6,2),
+                   WIND_DEG SMALLINT,
+                   SEASON VARCHAR(6),
+                   FORECAST_DATETIME TIMESTAMP
+                 )'
+                 )
+df4 <- dbExecute(conn,
+                 'CREATE TABLE SEOUL_BIKE_SHARING (
+                   DATE VARCHAR(30),
+                   RENTED_BIKE_COUNT SMALLINT,
+                   HOUR SMALLINT,
+                   TEMPERATURE DECIMAL(4,1),
+                   HUMIDITY SMALLINT,
+                   WIND_SPEED DECIMAL(3,1),
+                   VISIBILITY SMALLINT,
+                   DEW_POINT_TEMPERATURE DECIMAL(4,1),
+                   SOLAR_RADIATION DECIMAL(5,2),
+                   RAINFALL DECIMAL(3,1),
+                   SNOWFALL DECIMAL(3,1),
+                   SEASONS	VARCHAR(10),
+                   HOLIDAY	VARCHAR(20),
+                   FUNCTIONING_DAY VARCHAR(5)
+                 )'
+                 )
+df1 <- read.csv('world_cities.csv')
+df2 <- read.csv('bike_sharing_systems.csv')
+df3 <- read.csv('cities_weather_forecast.csv')
+df4 <- read.csv('seoul_bike_sharing.csv')
+
+ #writing into tables
+dbWriteTable(conn, "WORLD_CITIES", df1, overwrite=TRUE, header = TRUE)
+dbWriteTable(conn, 'BIKE_SHARING_SYSTEMS', df2, overwrite = TRUE, header = TRUE)
+dbWriteTable(conn, 'CITIES_WEATHER_FORECAST', df3, overwrite = TRUE, header = TRUE)
+dbWriteTable(conn, 'SEOUL_BIKE_SHARING', df4, overwrite = TRUE, header = TRUE)
+
+#displaying initial data from the seoul bike sharing dataset
+dbGetQuery(conn, 'SELECT * FROM SEOUL_BIKE_SHARING limit 5')
+#answering the questions on the seoul bike sharing
+#total count of records from the seoul_bike_sharing
+dbGetQuery(conn, 
+           'SELECT COUNT (*) FROM SEOUL_BIKE_SHARING')
+
+#non zero hour count
+dbGetQuery(conn,
+                       'SELECT DISTINCT COUNT(HOUR) 
+                       FROM SEOUL_BIKE_SHARING
+                       WHERE RENTED_BIKE_COUNT > 0')
+
+#first query on seoul weather foreceast
+dbGetQuery(conn,
+                     'SELECT * 
+                     FROM CITIES_WEATHER_FORECAST
+                     WHERE CITY = "Seoul"
+                     LIMIT 1')
+
+#SEASONS INCULUDED IN THE SEOUL BIKE SHARING DATA
+dbGetQuery(conn,
+           'SELECT DISTINCT SEASONS
+           FROM SEOUL_BIKE_SHARING')
+
+#SELECTING THE FIRST AND LAST DATE
+dbGetQuery(conn,
+           'SELECT DATE 
+           FROM SEOUL_BIKE_SHARING
+           LIMIT 1')
+dbGetQuery(conn,
+           'SELECT MIN(DATE) 
+           FROM SEOUL_BIKE_SHARING
+           ')
+
+#DATE AND HOUR WITH MOST BIKE_RENTALS
+dbGetQuery(conn, 
+           'SELECT MAX(RENTED_BIKE_COUNT) 
+           DATE, HOUR, RENTED_BIKE_COUNT
+           FROM SEOUL_BIKE_SHARING'
+           )
+
+
+#DETERMINING THE AVG HOURLY TEMPERATURE AND AVG NUMBER OF BIKE PER HOUR OVER EACH SEASON
+dbGetQuery(conn, 
+           'SELECT AVG(TEMPERATURE) HOUR, TEMPERATURE 
+           FROM SEOUL_BIKE_SHARING
+           WHERE HOUR BETWEEN 0 AND 23')
+dbGetQuery(conn,
+           'SELECT DISTINCT SEASONS,
+           AVG(RENTED_BIKE_COUNT)
+           FROM SEOUL_BIKE_SHARING' 
+           )
+
+#HOURLY BIKE COUNT DURING EACH SEASON
+dbGetQuery(conn,
+           'SELECT DISTINCT SEASONS, 
+           COUNT(RENTED_BIKE_COUNT) AS BIKE_COUNT
+           FROM SEOUL_BIKE_SHARING'
+           )
+
+dbGetQuery(conn,
+           'SELECT DISTINCT HOUR, RENTED_BIKE_COUNT
+           FROM SEOUL_BIKE_SHARING')
+dbGetQuery(conn, 
+           'SELECT DISTINCT HOUR, MAX(RENTED_BIKE_COUNT) AS BIKE_COUNT 
+           FROM SEOUL_BIKE_SHARING')
+dbGetQuery(conn, 
+           'SELECT DISTINCT HOUR, 
+           MIN(RENTED_BIKE_COUNT) AS BIKE_COUNT, 
+           DATE 
+           FROM SEOUL_BIKE_SHARING')
+
+#WEATHER SEASONALITY
+ws <- dbGetQuery(conn, 
+           'SELECT  SEASONS, 
+           AVG(RENTED_BIKE_COUNT) AS RENTED_BIKE, 
+           AVG(TEMPERATURE) AS TEMP, 
+           AVG(HUMIDITY) AS HUM, 
+           AVG(WIND_SPEED) AS WS, 
+           AVG(VISIBILITY) AS VIS, 
+           AVG(DEW_POINT_TEMPERATURE) AS DPT, 
+           AVG(SOLAR_RADIATION) AS SOLAR, 
+           AVG(RAINFALL) AS RAINFALL, 
+           AVG(SNOWFALL) AS SNOWFALL 
+           FROM SEOUL_BIKE_SHARING
+           GROUP BY SEASONS
+           ORDER BY RENTED_BIKE DESC'
+           )
+
+#USING OF IMPLICIT JOIN
+TB1<- dbGetQuery(conn, 
+           'SELECT WORLD_CITIES.CITY_ASCII, 
+           WORLD_CITIES.COUNTRY, 
+           WORLD_CITIES.LAT, 
+           WORLD_CITIES.LNG, 
+           WORLD_CITIES.POPULATION, 
+           BIKE_SHARING_SYSTEMS.BICYCLES
+           FROM WORLD_CITIES, BIKE_SHARING_SYSTEMS
+           WHERE WORLD_CITIES.CITY_ASCII = BIKE_SHARING_SYSTEMS.CITY
+           '
+           )
+
+#CITIES WITH BIKE COUNTS BETWEEN 1500 AND 2000
+tb2 <- dbGetQuery(conn, 
+           'SELECT WORLD_CITIES.CITY_ASCII, 
+           WORLD_CITIES.COUNTRY, 
+           WORLD_CITIES.LAT, 
+           WORLD_CITIES.Lng, 
+           WORLD_CITIES.POPULATION, 
+           BIKE_SHARING_SYSTEMS.BICYCLES
+          FROM WORLD_CITIES, BIKE_SHARING_SYSTEMS
+           WHERE WORLD_CITIES.CITY_ASCII = BIKE_SHARING_SYSTEMS.CITY
+           AND BIKE_SHARING_SYSTEMS.BICYCLES >= 15000
+           AND BIKE_SHARING_SYSTEMS.BICYCLES <=20000'
+)
+
+
+
